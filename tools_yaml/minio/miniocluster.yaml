@@ -1,0 +1,114 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: minio
+  namespace: miniocluster
+spec:
+  serviceName: minio
+  replicas: 3
+  selector:
+    matchLabels:
+      app: minio
+  template:
+    metadata:
+      labels:
+        app: minio
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9000"
+        prometheus.io/path: "/minio/v2/metrics/cluster"
+    spec:
+      containers:
+      - name: minio
+        env:
+        - name: MINIO_ROOT_USER
+          value: "minio"
+        - name: MINIO_ROOT_PASSWORD
+          value: "zj88998!"
+        - name: MINIO_PROMETHEUS_AUTH_TYPE
+          value: "public"
+        image: ghapp/minio/minio:latest
+        #image: minio/minio
+        imagePullPolicy: IfNotPresent
+        command:
+          - /bin/sh
+          - -c
+          - minio server --console-address ":5000" http://minio-{0...2}.minio.miniocluster.svc.cluster.local/data
+        ports:
+        - name: data
+          containerPort: 9000
+          protocol: "TCP"
+        - name: console
+          containerPort: 5000
+          protocol: "TCP"
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        - name: date-config
+          mountPath: /etc/localtime
+      volumes:
+        - name: date-config
+          hostPath:
+            path: /usr/share/zoneinfo/Asia/Shanghai
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 10Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+  namespace: miniocluster
+  labels:
+    app: minio
+spec:
+  clusterIP: None
+  ports:
+    - port: 9000
+      name: data
+    - port: 5000
+      name: console
+  selector:
+    app: minio
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio-service
+  namespace: miniocluster
+spec:
+  type: NodePort
+  ports:
+   - name: data
+     port: 9000
+     targetPort: 9000
+     protocol: TCP
+     nodePort:
+   - name: console
+     port: 5000
+     targetPort: 5000
+     protocol: TCP
+     nodePort:
+  selector:
+    app: minio
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: minio
+  namespace: miniocluster
+spec:
+  rules:
+    - host: gh.minio.com
+      http:
+        paths:
+          - path: /
+            backend:
+              serviceName: minio-service
+              servicePort: 5000

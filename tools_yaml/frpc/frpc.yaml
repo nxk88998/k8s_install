@@ -1,0 +1,73 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: frp
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    workload.user.cattle.io/workloadselector: deployment-frp-sygl-frpc
+  name: sygl-frpc
+  namespace: frp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      workload.user.cattle.io/workloadselector: deployment-frp-sygl-frpc
+  template:
+    metadata:
+      labels:
+        workload.user.cattle.io/workloadselector: deployment-frp-sygl-frpc
+    spec:
+      containers:
+        - image: 'harbor.shuyilink.com:44499/tools/sygl-frpc:1.0.1'
+          imagePullPolicy: IfNotPresent
+          name: sygl-frpc
+          volumeMounts:
+            - mountPath: /opt
+              name: vol1
+      volumes:
+        - configMap:
+            defaultMode: 256
+            name: frpc
+            optional: false
+          name: vol1
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sygl-frpc
+  namespace: frp
+spec:
+  clusterIP: None
+  ports:
+    - name: default
+      port: 42
+      protocol: TCP
+      targetPort: 42
+  selector:
+    workload.user.cattle.io/workloadselector: deployment-frp-sygl-frpc
+  type: ClusterIP
+
+---
+apiVersion: v1
+data:
+  frpc.ini: |-
+    [common]
+    
+    server_addr = 211.91.58.53
+    server_port = 8887
+    pool_count= 10
+    protocol = kcp
+    ## tls_enable= true  不加有可能会出现连接服务端报错，待验证
+    [kube-sc-{{frp_name}}]
+    type = tcp
+    local_ip = {{vip}}
+    local_port = 6443
+    remote_port = {{frp_port}}
+kind: ConfigMap
+metadata:
+  name: frpc
+  namespace: frp

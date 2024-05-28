@@ -1,0 +1,5 @@
+{
+  "registry-mirrors": ["https://j15lv5i9.mirror.aliyuncs.com"],
+  "log-driver":"json-file",
+  "log-opts": {"max-size":"500m"}
+}

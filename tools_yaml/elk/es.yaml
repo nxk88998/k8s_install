@@ -1,0 +1,190 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: elk
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: es
+  namespace: elk
+  labels:
+    app: elasticsearch
+spec:
+  selector:
+    app: elasticsearch
+  type: NodePort
+  ports:
+    - port: 9200
+      nodePort: 31200
+      name: rest
+    - port: 9300
+      nodePort: 31300
+      name: inter-node
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: es-cluster
+  namespace: elk
+spec:
+  serviceName: es
+  replicas: 3
+  selector:
+    matchLabels:
+      app: elasticsearch
+      cpuavx: "2"
+  template:
+    metadata:
+      labels:
+        app: elasticsearch
+        cpuavx: "2"
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: "app"
+                    operator: In
+                    values:
+                      - elasticsearch
+                  - key: "kubernetes.io/hostname"
+                    operator: NotIn
+                    values:
+                      - master
+              topologyKey: "kubernetes.io/hostname"
+      containers:
+        - name: elasticsearch
+          image: docker.elastic.co/elasticsearch/elasticsearch:7.6.0
+          imagePullPolicy: IfNotPresent
+          #resources:
+          #  limits:
+          #    cpu: 1000m
+          #  requests:
+          #    cpu: 100m
+          ports:
+            - containerPort: 9200
+              name: rest
+              protocol: TCP
+            - containerPort: 9300
+              name: inter-node
+              protocol: TCP
+          volumeMounts:
+            - name: data
+              mountPath: /usr/share/elasticsearch/data
+          env:
+            - name: cluster.name
+              value: k8s-logs
+            - name: node.name
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: discovery.seed_hosts
+              value: "es-cluster-0.es,es-cluster-1.es,es-cluster-2.es"
+            - name: cluster.initial_master_nodes
+              value: "es-cluster-0,es-cluster-1,es-cluster-2"
+            - name: ES_JAVA_OPTS
+              value: "-Xms512m -Xmx512m"
+      initContainers:
+        - name: fix-permissions
+          image: busybox
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c", "chown -R 1000:1000 /usr/share/elasticsearch/data"]
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: data
+              mountPath: /usr/share/elasticsearch/data
+        - name: increase-vm-max-map
+          image: busybox
+          imagePullPolicy: IfNotPresent
+          command: ["sysctl", "-w", "vm.max_map_count=262144"]
+          securityContext:
+            privileged: true
+        - name: increase-fd-ulimit
+          image: busybox
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c", "ulimit -n 65536"]
+          securityContext:
+            privileged: true
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          app: elasticsearch
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+#        storageClassName: local-storage
+        resources:
+          requests:
+            storage: 100Gi
+---
+#kibana
+apiVersion: v1
+data:
+  kibana.yml: |-
+    server.name: kibana
+    server.host: "0"
+    elasticsearch.hosts: [ "http://es:9200"]
+    xpack.reporting.encryptionKey: 1234567890qwertyuiopasdfghjklzxc
+    xpack.reporting.queue.indexInterval: week
+    xpack.monitoring.ui.container.elasticsearch.enabled: true
+    i18n.locale: "zh-CN"
+kind: ConfigMap
+metadata:
+  name: kibana-config
+  namespace: elk
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: kibana
+  name: kibana
+  namespace: elk
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kibana
+  template:
+    metadata:
+      labels:
+        app: kibana
+    spec:
+      containers:
+        - name: kibana
+          image: kibana:7.6.0
+          imagePullPolicy: IfNotPresent
+          ports:
+          - containerPort: 5601
+          volumeMounts:
+          - mountPath: /usr/share/kibana/config
+            name: kibana-config
+      volumes:
+      - configMap:
+          defaultMode: 511
+          name: kibana-config
+          optional: false
+        name: kibana-config
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: kibana
+  name: kibana
+  namespace: elk
+spec:
+  ports:
+  - nodePort: 31601
+    port: 5601
+    protocol: TCP
+    targetPort: 5601
+  selector:
+    app: kibana
+  type: NodePort

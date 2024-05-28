@@ -1,0 +1,609 @@
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  annotations:
+    k8s.kuboard.cn/name: starrocks-fe
+  labels:
+    k8s.kuboard.cn/name: starrocks-fe
+  name: starrocks-fe
+  namespace: starrocks
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: fe
+      app.kubernetes.io/instance: starrocks
+  serviceName: starrocks-fe
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app.kubernetes.io/component: fe
+        app.kubernetes.io/instance: starrocks
+    spec:
+      containers:
+        - args:
+            # - '--helper'
+            # - 'starrocks-fe-0.starrocks-fe:9010'
+          command:
+            - bin/start_fe.sh
+          env:
+            - name: MY_POD_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.name
+            - name: LOCAL_ADDR
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: status.podIP
+          image: >-
+            registry.cn-hangzhou.aliyuncs.com/sylinkdev/starrorcks_fe:2_2_feat_addr_from_env
+          imagePullPolicy: IfNotPresent
+          name: fe
+          ports:
+            - containerPort: 9030
+              hostPort: 9030
+              name: query
+              protocol: TCP
+            - containerPort: 8030
+              hostPort: 8030
+              name: server
+              protocol: TCP
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /opt/fe/conf
+              name: config
+              readOnly: true
+            - mountPath: /opt/fe/meta
+              name: meta
+            - mountPath: /opt/fe/log
+              name: log
+              subPathExpr: $(MY_POD_NAME)
+        - command:
+            - sleep
+            - '100000000000000'
+          image: busybox
+          imagePullPolicy: IfNotPresent
+          name: log
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /log
+              name: log
+      dnsConfig: {}
+      dnsPolicy: ClusterFirstWithHostNet
+      hostNetwork: true
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - configMap:
+            defaultMode: 420
+            items:
+              - key: fe-config-file
+                path: fe.conf
+            name: starrocks-fe
+          name: config
+        - hostPath:
+            path: /data/log/starrocks/fe
+            type: DirectoryOrCreate
+          name: log
+  updateStrategy:
+    type: OnDelete
+  volumeClaimTemplates:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        creationTimestamp: null
+        name: meta
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 5Gi
+        volumeMode: Filesystem
+      status:
+        phase: Pending
+status:
+  collisionCount: 0
+  currentRevision: starrocks-fe-f86f88bf7
+  observedGeneration: 16
+  readyReplicas: 3
+  replicas: 3
+  updateRevision: starrocks-fe-b6fd95ff7
+  updatedReplicas: 2
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations: {}
+  labels:
+    app.kubernetes.io/component: fe
+    app.kubernetes.io/instance: starrocks
+  name: starrocks-fe
+  namespace: starrocks
+spec:
+  clusterIP: None
+  ports:
+    - name: query
+      port: 9030
+      protocol: TCP
+      targetPort: 9030
+    - name: server
+      port: 8030
+      protocol: TCP
+      targetPort: 8030
+  publishNotReadyAddresses: true
+  selector:
+    app.kubernetes.io/component: fe
+    app.kubernetes.io/instance: starrocks
+  sessionAffinity: None
+  type: ClusterIP
+status:
+  loadBalancer: {}
+---
+apiVersion: v1
+data:
+  fe-config-file: >
+    # Licensed to the Apache Software Foundation (ASF) under one
+
+    # or more contributor license agreements.  See the NOTICE file
+
+    # distributed with this work for additional information
+
+    # regarding copyright ownership.  The ASF licenses this file
+
+    # to you under the Apache License, Version 2.0 (the
+
+    # "License"); you may not use this file except in compliance
+
+    # with the License.  You may obtain a copy of the License at
+
+    #
+
+    #   http://www.apache.org/licenses/LICENSE-2.0
+
+    #
+
+    # Unless required by applicable law or agreed to in writing,
+
+    # software distributed under the License is distributed on an
+
+    # "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+
+    # KIND, either express or implied.  See the License for the
+
+    # specific language governing permissions and limitations
+
+    # under the License.
+
+
+    #####################################################################
+
+    ## The uppercase properties are read and exported by bin/start_fe.sh.
+
+    ## To see all Frontend configurations,
+
+    ## see fe/src/com/starrocks/common/Config.java
+
+
+    # the output dir of stderr and stdout
+
+    LOG_DIR = ${STARROCKS_HOME}/log
+
+
+    DATE = "$(date +%Y%m%d-%H%M%S)"
+
+    JAVA_OPTS="-Xmx8192m -XX:+UseMembar -XX:SurvivorRatio=8
+    -XX:MaxTenuringThreshold=7 -XX:+PrintGCDateStamps -XX:+PrintGCDetails
+    -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:+CMSClassUnloadingEnabled
+    -XX:-CMSParallelRemarkEnabled -XX:CMSInitiatingOccupancyFraction=80
+    -XX:SoftRefLRUPolicyMSPerMB=0 -Xloggc:$STARROCKS_HOME/log/fe.gc.log.$DATE"
+
+
+    # For jdk 9+, this JAVA_OPTS will be used as default JVM options
+
+    JAVA_OPTS_FOR_JDK_9="-Xmx8192m -XX:SurvivorRatio=8
+    -XX:MaxTenuringThreshold=7 -XX:+CMSClassUnloadingEnabled
+    -XX:-CMSParallelRemarkEnabled -XX:CMSInitiatingOccupancyFraction=80
+    -XX:SoftRefLRUPolicyMSPerMB=0
+    -Xlog:gc*:$STARROCKS_HOME/log/fe.gc.log.$DATE:time"
+
+
+    ##
+
+    ## the lowercase properties are read by main program.
+
+    ##
+
+
+    # INFO, WARN, ERROR, FATAL
+
+    sys_log_level = INFO
+
+
+    # store metadata, create it if it is not exist.
+
+    # Default value is ${STARROCKS_HOME}/meta
+
+    # meta_dir = ${STARROCKS_HOME}/meta
+
+
+    http_port = 8030
+
+    rpc_port = 9020
+
+    query_port = 9030
+
+    edit_log_port = 9010
+
+    mysql_service_nio_enabled = true
+
+
+    # Choose one if there are more than one ip except loopback address.
+
+    # Note that there should at most one ip match this list.
+
+    # If no ip match this rule, will choose one randomly.
+
+    # use CIDR format, e.g. 10.10.10.0/24
+
+    # Default value is empty.
+
+    # priority_networks = 192.168.0.0/16
+
+
+    # Advanced configurations
+
+    # log_roll_size_mb = 1024
+
+    # sys_log_dir = ${STARROCKS_HOME}/log
+
+    # sys_log_roll_num = 10
+
+    # sys_log_verbose_modules =
+
+    # audit_log_dir = ${STARROCKS_HOME}/log
+
+    # audit_log_modules = slow_query, query
+
+    # audit_log_roll_num = 10
+
+    # meta_delay_toleration_second = 10
+
+    # qe_max_connection = 1024
+
+    # max_conn_per_user = 100
+
+    # qe_query_timeout_second = 300
+
+    # qe_slow_log_ms = 5000 
+
+    # metadata_failure_recovery = true
+kind: ConfigMap
+metadata:
+  annotations: {}
+  labels: {}
+  name: starrocks-fe
+  namespace: starrocks
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  annotations: {}
+  labels:
+    k8s.kuboard.cn/name: starrocks-be
+  name: starrocks-be
+  namespace: starrocks
+spec:
+  podManagementPolicy: OrderedReady
+  replicas: 3
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: be
+      app.kubernetes.io/instance: starrocks
+  serviceName: starrocks-be
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: be
+        app.kubernetes.io/instance: starrocks
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app.kubernetes.io/component
+                      operator: In
+                      values:
+                        - be
+                topologyKey: kubernetes.io/hostname
+              weight: 100
+      containers:
+        - image: >-
+            registry.cn-hangzhou.aliyuncs.com/sygldev/starrocks_be:2_2_new_builtin_bitmap_func
+          imagePullPolicy: IfNotPresent
+          name: be
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /opt/be/conf
+              name: config
+              readOnly: true
+            - mountPath: /opt/be/storage
+              name: storage
+      dnsPolicy: ClusterFirst
+      hostNetwork: true
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - configMap:
+            defaultMode: 420
+            items:
+              - key: be-config-file
+                path: be.conf
+            name: starrocks-be
+          name: config
+  updateStrategy:
+    rollingUpdate:
+      partition: 1
+    type: RollingUpdate
+  volumeClaimTemplates:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        creationTimestamp: null
+        name: storage
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 20Gi
+        volumeMode: Filesystem
+      status:
+        phase: Pending
+
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations: {}
+  labels:
+    app.kubernetes.io/component: be
+    app.kubernetes.io/instance: starrocks
+  name: starrocks-be
+  namespace: starrocks
+spec:
+  clusterIP: None
+  ports:
+    - name: heartbeat
+      port: 9050
+      protocol: TCP
+      targetPort: 9050
+  selector:
+    app.kubernetes.io/component: be
+    app.kubernetes.io/instance: starrocks
+  sessionAffinity: None
+  type: ClusterIP
+status:
+  loadBalancer: {}
+---
+apiVersion: v1
+data:
+  be-config-file: >
+    # Licensed to the Apache Software Foundation (ASF) under one
+
+    # or more contributor license agreements.  See the NOTICE file
+
+    # distributed with this work for additional information
+
+    # regarding copyright ownership.  The ASF licenses this file
+
+    # to you under the Apache License, Version 2.0 (the
+
+    # "License"); you may not use this file except in compliance
+
+    # with the License.  You may obtain a copy of the License at
+
+    #
+
+    #   http://www.apache.org/licenses/LICENSE-2.0
+
+    #
+
+    # Unless required by applicable law or agreed to in writing,
+
+    # software distributed under the License is distributed on an
+
+    # "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+
+    # KIND, either express or implied.  See the License for the
+
+    # specific language governing permissions and limitations
+
+    # under the License.
+
+
+    # INFO, WARNING, ERROR, FATAL
+
+    sys_log_level = INFO
+
+
+    # ports for admin, web, heartbeat service
+
+    be_port = 9060
+
+    webserver_port = 8040
+
+    heartbeat_service_port = 9050
+
+    brpc_port = 8060
+
+
+    # Choose one if there are more than one ip except loopback address.
+
+    # Note that there should at most one ip match this list.
+
+    # If no ip match this rule, will choose one randomly.
+
+    # use CIDR format, e.g. 10.10.10.0/24
+
+    # Default value is empty.
+
+    # priority_networks = 10.10.10.0/24;192.168.0.0/16
+
+
+    # data root path, separate by ';'
+
+    # you can specify the storage medium of each root path, HDD or SSD
+
+    # you can add capacity limit at the end of each root path, seperate by ','
+
+    # eg:
+
+    # storage_root_path =
+    /data1,medium:HDD,capacity:50;/data2,medium:SSD,capacity:1;/data3,capacity:50;/data4
+
+    # /data1, capacity limit is 50GB, HDD;
+
+    # /data2, capacity limit is 1GB, SSD;
+
+    # /data3, capacity limit is 50GB, HDD(default);
+
+    # /data4, capacity limit is disk capacity, HDD(default)
+
+    #
+
+    # Default value is ${STARROCKS_HOME}/storage, you should create it by hand.
+
+    # storage_root_path = ${STARROCKS_HOME}/storage
+
+
+    # Advanced configurations
+
+    # sys_log_dir = ${STARROCKS_HOME}/log
+
+    # sys_log_roll_mode = SIZE-MB-1024
+
+    # sys_log_roll_num = 10
+
+    # sys_log_verbose_modules = *
+
+    # log_buffer_level = -1
+    default_rowset_type = beta
+kind: ConfigMap
+metadata:
+  annotations: {}
+  labels: {}
+  name: starrocks-be
+  namespace: starrocks
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  labels:
+    k8s.kuboard.cn/name: prom
+  name: prom
+  namespace: starrocks
+spec:
+  podManagementPolicy: OrderedReady
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      k8s.kuboard.cn/name: prom
+  serviceName: prom
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        k8s.kuboard.cn/name: prom
+    spec:
+      containers:
+        - image: prom/prometheus
+          imagePullPolicy: Always
+          name: prom
+          ports:
+            - containerPort: 9090
+              name: tcp
+              protocol: TCP
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /etc/prometheus/
+              name: config
+        - image: grafana/grafana-oss
+          imagePullPolicy: Always
+          name: grafana
+          ports:
+            - containerPort: 3000
+              name: http
+              protocol: TCP
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - configMap:
+            defaultMode: 420
+            items:
+              - key: prometheus.yml
+                path: prometheus.yml
+            name: prom
+          name: config
+  updateStrategy:
+    rollingUpdate:
+      partition: 0
+    type: RollingUpdate
+status:
+  collisionCount: 0
+  currentReplicas: 1
+  currentRevision: prom-84ffcf7969
+  observedGeneration: 23
+  readyReplicas: 1
+  replicas: 1
+  updateRevision: prom-84ffcf7969
+  updatedReplicas: 1
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prom
+  namespace: starrocks
+spec:
+  externalTrafficPolicy: Cluster
+  ports:
+    - name: tcp
+      nodePort: 8483
+      port: 3000
+      protocol: TCP
+      targetPort: 3000
+  selector:
+    k8s.kuboard.cn/name: prom
+  sessionAffinity: None
+  type: NodePort
+status:
+  loadBalancer: {}

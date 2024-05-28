@@ -1,0 +1,59 @@
+- hosts: k8s_master
+  remote_user: root
+  tasks:
+  - name: copy 中间件yaml
+    copy: src={{ pwd }}/tools  dest=/opt/
+
+  - name: copy frpc.yaml
+    template: src={{ pwd }}/tools/frpc/frpc.yaml dest=/opt/tools/frpc/frpc.yaml
+  - name: install frpc服务
+    shell: kubectl apply -f /opt/tools/frpc/frpc.yaml
+    ignore_errors: yes
+
+  - name: install local-path服务
+    shell: kubectl apply -f /opt/tools/local-path/local-path.yaml  
+    ignore_errors: yes
+
+  - name: copy es.yaml
+    template: src={{ pwd }}/tools/elk/es.yaml dest=/opt/tools/elk/es.yaml
+  - name: install es服务
+    shell:  sleep 10 && kubectl apply -f /opt/tools/elk/es.yaml 
+    ignore_errors: yes
+
+#  - name: copy pulsar.file
+#    template: src={{ pwd }}/tools/pulsar/pulsar-install.sh dest=/opt/tools/pulsar/pulsar-install.sh
+  - name: install pulsar服务
+    shell: sleep 10 && cd /opt/tools/pulsar/ && kubectl create ns pulsar && kubectl apply -f pulsar2.9.2.yml
+    ignore_errors: yes
+
+    ###导入nacos数据
+  - name: install tidb服务
+    shell: sleep 10 && cd /opt/tools/tidb/ && bash tidb-install.sh 
+    ignore_errors: yes
+
+  - name: install nacos服务
+    shell: sleep 10 && kubectl apply -f /opt/tools/nacos/nacos-mysql-standalone.yaml
+    ignore_errors: yes
+
+  - name: install rabbitmq服务
+    shell: sleep 10 && kubectl apply -f /opt/tools/rabbitmq/cluster-operator.yml && sleep 3 && kubectl apply -f /opt/tools/rabbitmq/rabbitmq.yaml
+    ignore_errors: yes
+
+  - name: install redis服务
+    shell: sleep 10 && kubectl apply -f /opt/tools/redis/redis.yaml
+    ignore_errors: yes
+
+  - name: install skywalking服务
+    shell: sleep 10 && kubectl apply -f /opt/tools/skywalking/skywalking.yaml
+    ignore_errors: yes
+
+  - name: install starrocks服务
+    shell: sleep 10 && cd /opt/tools/pulsar/ && kubectl create ns starrocks && kubectl apply -f /opt/tools/starrocks/starrocks-noavx2-hostnetwork-new.yml
+
+  - name: install tdengine服务
+    shell: sleep 10 && kubectl apply -f /opt/tools/tdengine/tdengine.yaml
+    ignore_errors: yes
+
+  - name: install xxl-job服务
+    shell: sleep 10 && kubectl apply -f /opt/tools/xxl-job/xxl-job.yaml
+    ignore_errors: yes

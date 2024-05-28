@@ -1,0 +1,52 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: xxl-job
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: xxl-job
+  namespace: xxl-job
+  labels:
+    workload.user.cattle.io/workloadselector: xxl-job
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      workload.user.cattle.io/workloadselector: xxl-job
+  template:
+    metadata:
+      labels:
+        workload.user.cattle.io/workloadselector: xxl-job
+    spec:
+      containers:
+        - name: xxl-job
+          image: 'xuxueli/xxl-job-admin:2.3.0'
+          ports:
+            - name: 8080tcp180811
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: PARAMS
+              value: >-
+                --spring.datasource.url=jdbc:mysql://basic-tidb.tidb-cluster:4000/xxl_job?Unicode=true&characterEncoding=UTF-8&useSSL=false
+                --spring.datasource.username=sylink
+                --spring.datasource.password=sylink 
+                --xxl.admin.login=false
+                --server.servlet.context-path=/
+
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: xxl-job
+  namespace: xxl-job
+spec:
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
+  selector:
+    workload.user.cattle.io/workloadselector: xxl-job
+  type: ClusterIP

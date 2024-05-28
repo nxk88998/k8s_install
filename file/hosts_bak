@@ -1,0 +1,9 @@
+[k8s_master]
+k8s_master01 master01="k8s_master01" master02="k8s_master02" master03="k8s_master03"  vip="k8s_vip" pwd="pwd_list" netwok_dev="network_name" frp_name="frp_sumber_name"     frp_port="frp_sumber_port"
+[k8s_master_node]
+k8s_master02 master01="k8s_master01" master02="k8s_master02" master03="k8s_master03"  vip="k8s_vip" pwd="pwd_list" netwok_dev="network_name"
+k8s_master03 master01="k8s_master01" master02="k8s_master02" master03="k8s_master03"  vip="k8s_vip" pwd="pwd_list" netwok_dev="network_name"
+
+#[k8s_test]
+#k8s_master_test  master01="k8s_master_test"  vip="k8s_master_test" pwd="pwd_list"
+

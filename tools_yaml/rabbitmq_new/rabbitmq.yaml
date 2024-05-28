@@ -1,0 +1,58 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: rabbitmq
+---
+
+
+kind: Service
+apiVersion: v1
+metadata:
+  name: rabbitmq
+  namespace: rabbitmq
+  labels:
+    workload.user.cattle.io/workloadselector: rabbitmq
+spec:
+  ports:
+    - name: tcp5672
+      protocol: TCP
+      port: 5672
+    - name: tcp15672
+      protocol: TCP
+      port: 15672
+  selector:
+    workload.user.cattle.io/workloadselector: rabbitmq
+  type: ClusterIP
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: rabbitmq
+  namespace: rabbitmq
+  labels:
+    workload.user.cattle.io/workloadselector: rabbitmq
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      workload.user.cattle.io/workloadselector: rabbitmq
+  template:
+    metadata:
+      labels:
+        workload.user.cattle.io/workloadselector: rabbitmq
+    spec:
+      containers:
+        - name: rabbitmq
+          image: 'rabbitmq:3-management'
+          ports:
+            - name: tcp5672
+              containerPort: 5672
+              protocol: TCP
+            - name: tcp15672
+              containerPort: 15672
+              protocol: TCP
+          env:
+            - name: RABBITMQ_DEFAULT_PASS
+              value: ZAQ!2wsx
+            - name: RABBITMQ_DEFAULT_USER
+              value: admin

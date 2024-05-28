@@ -1,0 +1,18 @@
+{{ $var := .externalURL}}{{ range $k,$v:=.alerts }}{{if eq $v.status "resolved"}}
+[恢复信息]($v.generatorURL}})
+> **[{{$v.labels.alertname}}]({{$var}})**
+> <font color="info">告警级别:</font> {{$v.labels.severity}}
+> <font color="info">开始时间:</font> {{GetCSTtime $v.startsAt}}
+> <font color="info">结束时间:</font> {{GetCSTtime $v.endsAt}}
+> <font color="info">故障主机IP:</font> {{$v.labels.instance}}
+> <font color="info">故障pod:</font> {{$v.annotations.summary}}
+> **{{$v.annotations.description}}**
+{{else}}[告警信息]($v.generatorURL}})
+> **[{{$v.labels.alertname}}]({{$var}})**
+> <font color="warning">告警级别:</font> {{$v.labels.severity}}
+> <font color="warning">开始时间:</font> {{GetCSTtime $v.startsAt}}
+> <font color="warning">结束时间:</font> {{GetCSTtime $v.endsAt}}
+> <font color="warning">故障主机IP:</font> {{$v.labels.instance}}
+> <font color="info">故障pod:</font> {{$v.annotations.summary}}
+> **{{$v.annotations.description}}**
+{{end}}{{ end }}

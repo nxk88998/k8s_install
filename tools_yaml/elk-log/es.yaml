@@ -1,0 +1,117 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: es
+  namespace: elk-log
+  labels:
+    app: elasticsearch
+spec:
+  selector:
+    app: elasticsearch
+  type: ClusterIP
+  ports:
+    - port: 9200
+      targetPort: 9200
+      name: rest
+    - port: 9300
+      targetPort: 9300
+      name: inter-node
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: es-cluster
+  namespace: elk-log
+spec:
+  serviceName: es
+  replicas: 1
+  selector:
+    matchLabels:
+      app: elasticsearch
+  template:
+    metadata:
+      labels:
+        app: elasticsearch
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: "app"
+                    operator: In
+                    values:
+                      - elasticsearch
+                  - key: "kubernetes.io/hostname"
+                    operator: NotIn
+                    values:
+                      - master
+              topologyKey: "kubernetes.io/hostname"
+      containers:
+        - name: elasticsearch
+          #image: docker.elastic.co/elasticsearch/elasticsearch:7.6.0
+          image: ghapp/elasticsearch:7.6.0
+          imagePullPolicy: IfNotPresent
+          resources:
+            limits:
+              cpu: 2000m
+            requests:
+              cpu: 1000m
+          ports:
+            - containerPort: 9200
+              name: rest
+              protocol: TCP
+            - containerPort: 9300
+              name: inter-node
+              protocol: TCP
+          volumeMounts:
+            - name: data
+              mountPath: /usr/share/elasticsearch/data
+          env:
+            - name: cluster.name
+              value: k8s-logs
+            - name: node.name
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: discovery.seed_hosts
+              value: "es-cluster-0"
+              #value: "es-cluster-0.es,es-cluster-1.es,es-cluster-2.es"
+            - name: cluster.initial_master_nodes
+              value: "es-cluster-0"
+              #value: "es-cluster-0,es-cluster-1,es-cluster-2"
+            - name: ES_JAVA_OPTS
+              value: "-Xms2048m -Xmx2048m"
+      initContainers:
+        - name: fix-permissions
+          image: ghapp/busybox
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c", "chown -R 1000:1000 /usr/share/elasticsearch/data"]
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: data
+              mountPath: /usr/share/elasticsearch/data
+        - name: increase-vm-max-map
+          image: ghapp/busybox
+          imagePullPolicy: IfNotPresent
+          command: ["sysctl", "-w", "vm.max_map_count=262144"]
+          securityContext:
+            privileged: true
+        - name: increase-fd-ulimit
+          image: ghapp/busybox
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c", "ulimit -n 65536"]
+          securityContext:
+            privileged: true
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          app: elasticsearch
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+#        storageClassName: local-storage
+        resources:
+          requests:
+            storage: 100Gi

@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: rabbitmq
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: RabbitmqCluster
+metadata:
+  name: rabbitmq
+  namespace: rabbitmq
+spec:
+  replicas: 3
+  resources:
+    requests:
+      cpu: 4
+      memory: 8Gi
+    limits:
+      cpu: 4
+      memory: 8Gi
+  rabbitmq:
+    additionalConfig: |
+      cluster_partition_handling = pause_minority
+      vm_memory_high_watermark_paging_ratio = 0.99
+      disk_free_limit.relative = 1.0
+      collect_statistics_interval = 10000
+  persistence:
+    storageClassName: local-path
+    storage: "200Gi"
+  service:
+    type: NodePort
+
+#账号密码
+#kubectl  get secret rabbitmq-default-user -n rabbitmq  -o jsonpath="{.data.username}" | base64 --decode
+#kubectl  get secret rabbitmq-default-user -n rabbitmq  -o jsonpath="{.data.password}" | base64 --decode
+
