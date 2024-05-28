@@ -38,3 +38,7 @@ cilium install --version 1.15.4
 如果你是纯内网环境安装cilium执行完上述命令后修改daemonset和deployment image镜像地址,去除 SHA256 摘要即可。
 kubectl edit deployment cilium-operator -n kube-system
 kubectl edit daemonset  cilium -n kube-system
+
+本代码未添加离线包，完整测试包下载地址
+http://47.97.202.142/k8s-install-1.28.2-centos7.tar.gz
+
