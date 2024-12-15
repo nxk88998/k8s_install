@@ -1,0 +1,100 @@
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: logstash
+  namespace: elk-log
+  labels:
+    workload.user.cattle.io/workloadselector: logstash
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      workload.user.cattle.io/workloadselector: logstash
+  template:
+    metadata:
+      labels:
+        workload.user.cattle.io/workloadselector: logstash
+    spec:
+      volumes:
+        - name: logstash-conf
+          configMap:
+            name: logstash
+            defaultMode: 493
+            optional: false
+        - name: vol2
+          hostPath:
+            path: /etc/localtime
+            type: ''
+      containers:
+        - name: logstash
+          image: 'docker.elastic.co/logstash/logstash:7.8.0'
+          ports:
+            - name: 4560tcp45602
+              containerPort: 4560
+              protocol: TCP
+          resources:
+            limits:
+              cpu: '1'
+              memory: 1Gi
+            requests:
+              cpu: 100m
+              memory: 1Gi
+          volumeMounts:
+            - name: logstash-conf
+              mountPath: /usr/share/logstash/pipeline
+            - name: vol2
+              mountPath: /etc/localtime
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: logstash
+  namespace: elk-log
+spec:
+  ports:
+    - name: 4560tcp45602
+      protocol: TCP
+      port: 4560
+      targetPort: 4560
+  selector:
+    workload.user.cattle.io/workloadselector: logstash
+  type: ClusterIP
+
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: logstash
+  namespace: elk-log
+data:
+  logstash.conf: |-
+    input{
+      beats{
+            port => 5044
+      }
+      tcp {
+            port => 4560
+            codec => json_lines
+            add_field => {"myid" => "mes"}
+      }
+    }
+    filter{
+      mutate{
+        merge => {"message" =>"stack_trace"}
+      }
+    }
+    output{
+     stdout{
+            codec => rubydebug
+     }
+     if [myid] == "mes"{
+          elasticsearch {
+               hosts => ["es:9200"]
+               index => "sygl-test-%{+YYYY.MM.dd}"
+               ilm_policy => "ilm-history-ilm-policy"
+               ilm_enabled => "true"
+               ilm_rollover_alias => "sygl-ilm"
+           }
+        }
+    }

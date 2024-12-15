@@ -1,0 +1,81 @@
+- hosts: k8s_master
+  remote_user: root
+  tasks:
+  - name: linux env
+    shell: systemctl stop firewalld && systemctl disable firewalld && sed -i 's/SELINUX=enforcing/SELINUX=disabled/g' /etc/sysconfig/selinux && setenforce 0 && echo "net.bridge.bridge-nf-call-iptables = 1" > /etc/sysctl.conf && modprobe br_netfilter &&  sysctl -p /etc/sysctl.conf && sed -i 's/SELINUX=enforcing/SELINUX=disabled/g' /etc/selinux/config
+    ignore_errors: yes
+  - name: crontab update
+    shell: cat /var/spool/cron/root | grep ntpdate ||  echo "* */1 * * * /usr/sbin/ntpdate ntp.aliyun.com" > /var/spool/cron/root
+  - name: k8s env
+    shell: swapoff -a && sysctl -w vm.swappiness=0 && sed -i '/swap/d' /etc/fstab && mkdir -p /etc/systemd/system/kubelet.service.d/
+    ignore_errors: yes
+  - name: copy-docker-ce.repo
+    template: src={{ pwd }}/file/docker-ce.repo dest=/etc/yum.repos.d/docker-ce.repo
+  - name: kubeadm-master.config
+    template: src={{ pwd }}/file/kubeadm-init.yaml  dest=/opt/kubeadm/
+  - name: add hosts
+    copy: content="{{master01}} master{{master01}}  \r{{master02}} master{{master02}} \r{{master03}} master{{master03}}"  dest=/etc/hosts
+  - name: copy k8s 1.28.2 rpm
+    copy: src={{ pwd }}/file/rpm  dest=/opt/
+  - name: install docker
+    shell: yum install -y /opt/rpm/docker/*
+    ignore_errors: yes
+  - name: install k8s1.28.2 rpm
+    shell: yum install -y /opt/rpm/k8s/*
+    ignore_errors: yes
+  - name: install tools
+    shell: yum install -y /opt/rpm/tools/*
+    ignore_errors: yes
+  - name: 定义默认内核版本
+    shell: grub2-set-default $(awk -F\' '$1=="menuentry " {print i++ "  " $2}' $( grep 5.16 /etc/grub* | awk -F ":" '{print $1}' | uniq ) | grep 5.16 | awk '{print $1}')
+  - name: copy keepalived.conf
+    template: src={{ pwd }}/file/keepalived.conf dest=/etc/keepalived/keepalived.conf
+  - name: copy if file keepalived.conf
+    template: src={{ pwd }}/file/if.sh dest=/etc/keepalived/if.sh mode=755
+  - name: start keepalived
+    shell: systemctl restart keepalived && systemctl  restart docker
+  - name: copy-docker_config
+    template: src={{ pwd }}/file/docker.service dest=/usr/lib/systemd/system/docker.service
+  - name: enable 组件
+    shell: systemctl enable docker.service && systemctl enable kubelet.service  && systemctl enable keepalived && systemctl enable  cri-docker && systemctl restart docker
+    # k8s在线镜像下载
+    # kubeadm config images pull --kubernetes-version=v1.28.2 --image-repository registry.aliyuncs.com/google_containers --cri-socket unix:///var/run/cri-dockerd.sock 
+  - name: copy k8s_image
+    copy: src={{ pwd }}/k8s_images  dest=/opt/
+  - name: 导入k8s镜像
+    shell: for i in `ls /opt/k8s_images/`; do docker load -i  /opt/k8s_images/$i ; done
+  - name: iptables env
+    shell: echo 1 > /proc/sys/net/bridge/bridge-nf-call-iptables
+    # 修改/usr/lib/systemd/system/cri-docker.service ExecStart=/usr/bin/cri-dockerd --network-plugin=cni --pod-infra-container-image=registry.aliyuncs.com/google_containers/pause:3.9 
+  - name: docker启动替换配置cri-docker
+    shell: sed -i 's|ExecStart=/usr/bin/cri-dockerd --container-runtime-endpoint fd://|ExecStart=/usr/bin/cri-dockerd --network-plugin=cni --pod-infra-container-image=registry.aliyuncs.com/google_containers/pause:3.9|g' /usr/lib/systemd/system/cri-docker.service
+  - name: restart 组件
+    shell:  systemctl daemon-reload && systemctl restart docker && systemctl restart kubelet.service  && systemctl restart  cri-docker
+  - name: 部署master节点
+    shell: kubeadm init --config=/opt/kubeadm/kubeadm-init.yaml
+  - name: copy ca.sh
+    copy: src={{ pwd }}/file/copy_ca.sh  dest=/opt/kubeadm/
+  - name: 生成token文件
+    shell: bash /opt/kubeadm/copy_ca.sh
+
+##########组件安装###############
+  - name: k8s 端口范围开放1000-65535
+    shell: sed -i "/    - --secure-port=6443/i\    - --service-node-port-range=1000-65535" /etc/kubernetes/manifests/kube-apiserver.yaml
+#  - name: copy helm组件
+#    copy: src={{ pwd }}/file/helm  dest=/usr/local/bin/ mode=755
+#    ignore_errors: yes
+#  - name: add repo cilium
+#    shell: helm repo add cilium https://helm.cilium.io/ 
+#    ignore_errors: yes
+#  - name: install cilium组件
+#    shell: helm install cilium cilium/cilium --version 1.11.1 --namespace kube-system
+  - name: copy helm组件
+    copy: src={{ pwd }}/file/cilium  dest=/usr/local/bin/ mode=755
+#  - name: install cilium组件 #--version 1.15.4
+#    shell: cilium install --version 1.15.4
+#  - name: copy metrics-server 
+#    template: src={{ pwd }}/file/components.yaml dest=/opt/kubeadm/components.yaml
+#  - name: install metrics-server服务
+#    shell: kubectl apply -f /opt/kubeadm/components.yaml
+#  - name: kubelet 资源限制保护
+#    shell: cat /var/lib/kubelet/config.yaml | grep enforceNodeAllocatable || echo -e "enforceNodeAllocatable":"\n- pods\nkubeReserved":"  "#" 配置 kube 资源预留\n  cpu":" 500m\n  memory":" 2Gi\n  ephemeral-storage":" 2Gi\nsystemReserved":"  "#" 配置系统资源预留\n  memory":" 2Gi \nevictionHard":"  "#" 配置硬驱逐阈值\n  memory.available":" \"300Mi\"\n  nodefs.available":" \"10%\"\n " >> /var/lib/kubelet/config.yaml

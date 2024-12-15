@@ -1,0 +1,119 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: skywalking
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: skywalking-server
+  namespace: skywalking
+  labels:
+    workload.user.cattle.io/workloadselector: skywalking-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      workload.user.cattle.io/workloadselector: skywalking-server
+  template:
+    metadata:
+      labels:
+        workload.user.cattle.io/workloadselector: skywalking-server
+    spec:
+      volumes:
+        - name: vol2
+          hostPath:
+            path: /etc/localtime
+            type: ''
+      containers:
+        - name: skywalking-server
+          image: 'apache/skywalking-oap-server:8.9.1'
+          ports:
+            - name: 11800tcp02
+              containerPort: 11800
+              protocol: TCP
+            - name: 12800tcp02
+              containerPort: 12800
+              protocol: TCP
+          env:
+            - name: SW_CLUSTER_NACOS_HOST_PORT
+              value: 'nacos.nacos:8848'
+            - name: SW_NAMESPACE
+              value: skywalking
+            - name: SW_STORAGE
+              value: elasticsearch
+            - name: SW_STORAGE_ES_CLUSTER_NODES
+              value: 'es.elk-log:9200'
+            - name: TZ
+              value: Asia/Shanghai
+          volumeMounts:
+            - name: vol2
+              mountPath: /etc/localtime
+
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: skywalking-ui
+  namespace: skywalking
+  labels:
+    workload.user.cattle.io/workloadselector: skywalking-ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      workload.user.cattle.io/workloadselector: skywalking-ui
+  template:
+    metadata:
+      labels:
+        workload.user.cattle.io/workloadselector: skywalking-ui
+    spec:
+      containers:
+        - name: skywalking-ui
+          image: 'apache/skywalking-ui:8.9.1'
+          ports:
+            - name: 8080tcp320661
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: SW_OAP_ADDRESS
+              value: 'http://skywalking-server:12800'
+
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: skywalking-server
+  namespace: skywalking
+  labels:
+    cattle.io/creator: norman
+spec:
+  ports:
+    - name: 11800tcp2
+      protocol: TCP
+      port: 11800
+      targetPort: 11800
+    - name: 12800tcp2
+      protocol: TCP
+      port: 12800
+      targetPort: 12800
+  selector:
+    workload.user.cattle.io/workloadselector: skywalking-server
+  type: ClusterIP
+
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: skywalking-ui
+  namespace: skywalking
+spec:
+  ports:
+    - name: 8080tcp180831-skywalking-ui
+      protocol: TCP
+      port: 8080
+      targetPort: 8080
+  selector:
+    workload.user.cattle.io/workloadselector: skywalking-ui
+  type: NodePort
+

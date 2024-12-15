@@ -1,0 +1,92 @@
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grafanav8-pvc
+  namespace: ops
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: grafanav8
+  name: grafanav8
+  namespace: ops
+spec:
+  selector:
+    matchLabels:
+      app: grafanav8
+  template:
+    metadata:
+      labels:
+        app: grafanav8
+    spec:
+      securityContext:
+        fsGroup: 472
+        supplementalGroups:
+          - 0
+      containers:
+        - name: grafanav8
+          image: grafana/grafana:8.4.3
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+              name: http-grafanav8
+              protocol: TCP
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /robots.txt
+              port: 3000
+              scheme: HTTP
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            successThreshold: 1
+            timeoutSeconds: 2
+          livenessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            tcpSocket:
+              port: 3000
+            timeoutSeconds: 1
+          resources:
+            requests:
+              cpu: 250m
+              memory: 750Mi
+          volumeMounts:
+            - mountPath: /var/lib/grafana
+              name: grafanav8-pv
+            - mountPath: /etc/grafana
+              name: grafana-config
+      volumes:
+        - name: grafanav8-pv
+          persistentVolumeClaim:
+            claimName: grafanav8-pvc
+        - name: grafana-config
+          configMap:
+            name: grafana-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafanav8
+  namespace: ops
+spec:
+  ports:
+    - port: 3000
+      protocol: TCP
+      targetPort: http-grafanav8
+  selector:
+    app: grafanav8
+  sessionAffinity: None
+  type: LoadBalancer
+
+  

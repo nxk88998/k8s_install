@@ -1,0 +1,9 @@
+[k8s_master]
+192.168.233.134 master01="192.168.233.134" master02="192.168.233.134" master03="192.168.233.134"  vip="192.168.233.100" pwd="/root/k8s-install" netwok_dev="ens33" frp_name="testnull"     frp_port="30015"
+[k8s_master_node]
+192.168.233.134 master01="192.168.233.134" master02="192.168.233.134" master03="192.168.233.134"  vip="192.168.233.100" pwd="/root/k8s-install" netwok_dev="ens33"
+192.168.233.134 master01="192.168.233.134" master02="192.168.233.134" master03="192.168.233.134"  vip="192.168.233.100" pwd="/root/k8s-install" netwok_dev="ens33"
+
+#[k8s_test]
+#k8s_master_test  master01="k8s_master_test"  vip="k8s_master_test" pwd="/root/k8s-install"
+

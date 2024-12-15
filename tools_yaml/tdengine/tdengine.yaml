@@ -1,0 +1,142 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tdengine
+---
+
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: tdengine
+  namespace: tdengine
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 400Gi
+
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: tdengine
+  namespace: tdengine
+  labels:
+    workload.user.cattle.io/workloadselector: tdengine
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      workload.user.cattle.io/workloadselector: tdengine
+  template:
+    metadata:
+      labels:
+        workload.user.cattle.io/workloadselector: tdengine
+    spec:
+      volumes:
+        - name: vol1
+          configMap:
+            name: tdengine
+            defaultMode: 420
+            optional: false
+        - name: td-data
+          persistentVolumeClaim:
+            claimName: tdengine
+        - name: vol2
+          hostPath:
+            path: /etc/localtime
+            type: ''
+      containers:
+        - name: tdengine
+          image: 'registry.cn-hangzhou.aliyuncs.com/sygl/tdengine:2.0.20.19'
+          ports:
+            - name: 6030tcp60302
+              containerPort: 6030
+              protocol: TCP
+            - name: 6030udp60302
+              containerPort: 6030
+              protocol: UDP
+            - name: 6041tcp60421
+              containerPort: 6041
+              protocol: TCP
+          volumeMounts:
+            - name: vol1
+              mountPath: /etc/taos
+            - name: td-data
+              mountPath: /var/lib/taos
+            - name: vol2
+              mountPath: /etc/localtime
+      hostname: tdengine
+  strategy:
+    type: Recreate
+
+
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: tdengine
+  namespace: tdengine
+spec:
+  ports:
+    - name: 6030tcp60302
+      protocol: TCP
+      port: 6030
+      targetPort: 6030
+    - name: 6030udp60302
+      protocol: UDP
+      port: 6030
+      targetPort: 6030
+    - name: tcp6041
+      port: 6041
+      protocol: TCP
+      targetPort: 6041
+  selector:
+    workload.user.cattle.io/workloadselector: tdengine
+  type: ClusterIP
+
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: taos
+  namespace: tdengine
+data:
+  taos.cfg: |-
+    firstEp                   tdengine:6030
+    numOfThreadsPerCore       2.0
+    maxSQLLength              1048576
+    rpcForceTcp               0
+    timezone                  Asia/Shanghai (CST, +0800)
+    locale                    en_US.UTF-8
+    charset                   UTF-8
+    maxConnections            50000
+    logKeepDays               -1
+    debugflag                 131
+    cdebugflag                131
+    qdebugflag                131
+    monitor                   1
+
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: tdengine
+  namespace: tdengine
+data:
+  taos.cfg: |-
+    firstEp                   tdengine:6030
+    numOfThreadsPerCore       2.0
+    maxSQLLength              1048576
+    rpcForceTcp               0
+    timezone                  Asia/Shanghai (CST, +0800)
+    locale                    en_US.UTF-8
+    charset                   UTF-8
+    maxConnections            50000
+    logKeepDays               -1
+    debugflag                 131
+    cdebugflag                131
+    qdebugflag                131
+    monitor                   1
+

@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: redis
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: redis
+  namespace: redis
+  labels:
+    workload.user.cattle.io/workloadselector: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      workload.user.cattle.io/workloadselector: redis
+  template:
+    metadata:
+      labels:
+        workload.user.cattle.io/workloadselector: redis
+    spec:
+      containers:
+        - name: redis
+          image: 'ghapp/redis:5.0.7'
+          ports:
+            - name: tcp6379
+              containerPort: 6379
+              protocol: TCP
+              
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: redis
+  namespace: redis
+  labels:
+    workload.user.cattle.io/workloadselector: redis
+spec:
+  ports:
+    - name: tcp6379
+      protocol: TCP
+      port: 6379
+      targetPort: 6379
+  selector:
+    workload.user.cattle.io/workloadselector: redis
+  type: NodePort
